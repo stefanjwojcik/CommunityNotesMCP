@@ -1,6 +1,6 @@
-# TikTok Community Notes MCP Server
+# Community Notes MCP Server
 
-A Model Context Protocol (MCP) server for querying and semantically searching TikTok Community Notes. This server provides fast access to community notes data with support for filtering by status (helpful, not helpful, needs more ratings) and semantic similarity search using embeddings.
+A Model Context Protocol (MCP) server for querying and semantically searching Community Notes. This server provides fast access to community notes data with support for filtering by status (helpful, not helpful, needs more ratings) and semantic similarity search using embeddings.
 
 ## Features
 
@@ -188,7 +188,3 @@ Run `python ingest_data.py` to create the database first.
 - Reduce batch_size in `ingest_data.py`
 - Process notes in chunks
 - Use a smaller embedding model
-
-## License
-
-This project is for working with TikTok Community Notes data. Please ensure compliance with TikTok's data usage policies.
