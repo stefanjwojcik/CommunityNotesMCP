@@ -1,5 +1,5 @@
 #!/bin/bash
-# Installation script for TikTok Community Notes MCP Server
+# Installation script for Community Notes MCP Server
 
 set -e  # Exit on error
 

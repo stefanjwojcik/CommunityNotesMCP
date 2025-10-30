@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Ingestion script for TikTok Community Notes data.
+Ingestion script for Community Notes data.
 Reads TSV files, generates embeddings, and stores in DuckDB.
 """
 

@@ -1,5 +1,5 @@
 @echo off
-REM Installation script for TikTok Community Notes MCP Server (Windows)
+REM Installation script for Community Notes MCP Server (Windows)
 
 echo ======================================
 echo Community Notes MCP Server - Setup

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Update script for TikTok Community Notes data.
+Update script for Community Notes data.
 Downloads new data (zip files), diffs with existing data, and updates database incrementally.
 """
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-MCP Server for TikTok Community Notes.
+MCP Server for Community Notes.
 Provides tools for querying and semantic search of community notes.
 """
 
