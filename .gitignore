@@ -30,3 +30,7 @@ venv.bak/
 *.duckdb
 community_notes.db
 .DS_Store
+note_ids_mapping.pkl
+notes_index.faiss
+data/notes-00000.tsv
+data/noteStatusHistory-00000.tsv
