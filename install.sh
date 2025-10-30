@@ -37,20 +37,54 @@ if [ -z "$PYTHON_CMD" ]; then
 fi
 echo ""
 
-# Check if data files exist
+# Check if data files exist, download if missing
 echo "Checking for data files..."
+mkdir -p data
+
+NOTES_URL="https://ton.twimg.com/birdwatch-public-data/2025/01/01/notes/notes-00000.tsv"
+STATUS_URL="https://ton.twimg.com/birdwatch-public-data/2025/01/01/noteStatusHistory/noteStatusHistory-00000.tsv"
+
 if [ ! -f "data/notes-00000.tsv" ]; then
-    echo "ERROR: data/notes-00000.tsv not found!"
-    echo "Please ensure the data files are in the data/ directory."
-    exit 1
+    echo "notes-00000.tsv not found. Downloading from Twitter..."
+    if command -v curl &> /dev/null; then
+        curl -L -o "data/notes-00000.tsv" "$NOTES_URL"
+    elif command -v wget &> /dev/null; then
+        wget -O "data/notes-00000.tsv" "$NOTES_URL"
+    else
+        echo "ERROR: Neither curl nor wget found. Cannot download data files."
+        echo "Please install curl or wget, or manually download files to data/ directory."
+        exit 1
+    fi
+
+    if [ $? -ne 0 ]; then
+        echo "ERROR: Failed to download notes-00000.tsv"
+        exit 1
+    fi
+    echo "notes-00000.tsv downloaded successfully!"
+else
+    echo "notes-00000.tsv found!"
 fi
 
 if [ ! -f "data/noteStatusHistory-00000.tsv" ]; then
-    echo "ERROR: data/noteStatusHistory-00000.tsv not found!"
-    echo "Please ensure the data files are in the data/ directory."
-    exit 1
+    echo "noteStatusHistory-00000.tsv not found. Downloading from Twitter..."
+    if command -v curl &> /dev/null; then
+        curl -L -o "data/noteStatusHistory-00000.tsv" "$STATUS_URL"
+    elif command -v wget &> /dev/null; then
+        wget -O "data/noteStatusHistory-00000.tsv" "$STATUS_URL"
+    else
+        echo "ERROR: Neither curl nor wget found. Cannot download data files."
+        echo "Please install curl or wget, or manually download files to data/ directory."
+        exit 1
+    fi
+
+    if [ $? -ne 0 ]; then
+        echo "ERROR: Failed to download noteStatusHistory-00000.tsv"
+        exit 1
+    fi
+    echo "noteStatusHistory-00000.tsv downloaded successfully!"
+else
+    echo "noteStatusHistory-00000.tsv found!"
 fi
-echo "Data files found!"
 echo ""
 
 # Create virtual environment

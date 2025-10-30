@@ -27,20 +27,38 @@ if errorlevel 1 (
 python --version
 echo.
 
-REM Check if data files exist
+REM Check if data files exist, download if missing
 echo Checking for data files...
+if not exist "data" mkdir data
+
+set NOTES_URL=https://ton.twimg.com/birdwatch-public-data/2025/01/01/notes/notes-00000.tsv
+set STATUS_URL=https://ton.twimg.com/birdwatch-public-data/2025/01/01/noteStatusHistory/noteStatusHistory-00000.tsv
+
 if not exist "data\notes-00000.tsv" (
-    echo ERROR: data\notes-00000.tsv not found!
-    echo Please ensure the data files are in the data\ directory.
-    exit /b 1
+    echo notes-00000.tsv not found. Downloading from Twitter...
+    curl -L -o "data\notes-00000.tsv" "%NOTES_URL%"
+    if errorlevel 1 (
+        echo ERROR: Failed to download notes-00000.tsv
+        echo Please ensure curl is installed or manually download the file.
+        exit /b 1
+    )
+    echo notes-00000.tsv downloaded successfully!
+) else (
+    echo notes-00000.tsv found!
 )
 
 if not exist "data\noteStatusHistory-00000.tsv" (
-    echo ERROR: data\noteStatusHistory-00000.tsv not found!
-    echo Please ensure the data files are in the data\ directory.
-    exit /b 1
+    echo noteStatusHistory-00000.tsv not found. Downloading from Twitter...
+    curl -L -o "data\noteStatusHistory-00000.tsv" "%STATUS_URL%"
+    if errorlevel 1 (
+        echo ERROR: Failed to download noteStatusHistory-00000.tsv
+        echo Please ensure curl is installed or manually download the file.
+        exit /b 1
+    )
+    echo noteStatusHistory-00000.tsv downloaded successfully!
+) else (
+    echo noteStatusHistory-00000.tsv found!
 )
-echo Data files found!
 echo.
 
 REM Create virtual environment
