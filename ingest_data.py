@@ -87,7 +87,8 @@ def create_database(db_path: str = "community_notes.db"):
 def load_and_embed_notes(
     notes_path: str,
     model_name: str = "all-MiniLM-L6-v2",
-    batch_size: int = 1000
+    batch_size: int = 1000,
+    limit: Optional[int] = None
 ):
     """Load notes and generate embeddings for summaries."""
     print(f"Loading notes from {notes_path}...")
@@ -99,6 +100,11 @@ def load_and_embed_notes(
     # Filter out notes without summaries
     notes_df = notes_df[notes_df['summary'].notna() & (notes_df['summary'] != '')]
     print(f"Filtered to {len(notes_df)} notes with summaries")
+
+    # Limit for demo mode
+    if limit:
+        notes_df = notes_df.head(limit)
+        print(f"DEMO MODE: Limited to {len(notes_df)} notes")
 
     # Load embedding model
     print(f"Loading embedding model: {model_name}...")
@@ -131,7 +137,8 @@ def ingest_data(
     notes_path: str,
     status_path: str,
     db_path: str = "community_notes.db",
-    model_name: str = "all-MiniLM-L6-v2"
+    model_name: str = "all-MiniLM-L6-v2",
+    limit: Optional[int] = None
 ):
     """Main ingestion pipeline."""
     # Create database
@@ -139,7 +146,7 @@ def ingest_data(
     con = create_database(db_path)
 
     # Load and embed notes
-    notes_df = load_and_embed_notes(notes_path, model_name)
+    notes_df = load_and_embed_notes(notes_path, model_name, limit=limit)
 
     # Load status history
     status_df = load_status_history(status_path)
@@ -167,6 +174,21 @@ def ingest_data(
     con.close()
 
 if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Ingest Community Notes data")
+    parser.add_argument(
+        "--demo",
+        action="store_true",
+        help="Demo mode: process only 1000 records for quick testing"
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        help="Limit the number of records to process"
+    )
+    args = parser.parse_args()
+
     notes_path = "data/notes-00000.tsv"
     status_path = "data/noteStatusHistory-00000.tsv"
 
@@ -178,4 +200,20 @@ if __name__ == "__main__":
         print(f"Error: {status_path} not found")
         sys.exit(1)
 
-    ingest_data(notes_path, status_path)
+    # Determine limit
+    limit = None
+    db_path = "community_notes.db"
+
+    if args.demo:
+        limit = 1000
+        db_path = "community_notes_demo.db"
+        print("=" * 50)
+        print("DEMO MODE: Processing only 1000 records")
+        print(f"Database: {db_path}")
+        print("=" * 50)
+        print()
+    elif args.limit:
+        limit = args.limit
+        print(f"Processing limited to {limit} records")
+
+    ingest_data(notes_path, status_path, db_path=db_path, limit=limit)

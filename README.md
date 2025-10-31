@@ -48,20 +48,24 @@ Run the automated install script:
 
 **Linux/Mac:**
 ```bash
-./install.sh
+./install.sh           # Full install (all 2M records, 15-30 minutes)
+./install.sh --demo    # Demo mode (1000 records, 1-2 minutes)
 ```
 
 **Windows:**
 ```bash
-install.bat
+install.bat           # Full install (all 2M records, 15-30 minutes)
+install.bat --demo    # Demo mode (1000 records, 1-2 minutes)
 ```
 
 The script will:
-1. Check for required data files
+1. Download data files if not present
 2. Create a virtual environment
 3. Install all dependencies
-4. Run the data ingestion (may take 15-30 minutes)
+4. Run the data ingestion
 5. Provide configuration instructions
+
+**For local testing, use `--demo` mode to quickly set up with a small dataset (1000 records).**
 
 ### Manual Install
 
@@ -110,6 +114,22 @@ Add the server to your MCP client configuration. For Claude Desktop, edit your c
 **Note**: If you used the install script, it will display the exact configuration with the correct path.
 
 Restart Claude Desktop or your MCP client to load the new server.
+
+## Testing Locally
+
+To test that everything works before connecting to an MCP client:
+
+```bash
+# Activate virtual environment
+source venv/bin/activate  # Linux/Mac
+# or
+venv\Scripts\activate.bat  # Windows
+
+# Run the test script
+python test_mcp.py
+```
+
+This will test all four tools and show sample output to verify the server is working correctly.
 
 ## Usage Examples
 

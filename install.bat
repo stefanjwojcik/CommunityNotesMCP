@@ -1,8 +1,13 @@
 @echo off
 REM Installation script for Community Notes MCP Server (Windows)
 
+REM Parse arguments
+set DEMO_MODE=false
+if "%1"=="--demo" set DEMO_MODE=true
+
 echo ======================================
 echo Community Notes MCP Server - Setup
+if "%DEMO_MODE%"=="true" echo (DEMO MODE - 1000 records only)
 echo ======================================
 echo.
 
@@ -86,12 +91,20 @@ echo.
 REM Run data ingestion
 echo ======================================
 echo Starting data ingestion...
-echo This may take 15-30 minutes depending on your hardware.
-echo Processing ~2M records and generating embeddings...
+if "%DEMO_MODE%"=="true" (
+    echo DEMO MODE: Processing only 1000 records (~1-2 minutes^)
+) else (
+    echo This may take 15-30 minutes depending on your hardware.
+    echo Processing ~2M records and generating embeddings...
+)
 echo ======================================
 echo.
 
-python ingest_data.py
+if "%DEMO_MODE%"=="true" (
+    python ingest_data.py --demo
+) else (
+    python ingest_data.py
+)
 
 if errorlevel 1 (
     echo.
@@ -105,7 +118,12 @@ echo ======================================
 echo Installation Complete!
 echo ======================================
 echo.
-echo Database created: community_notes.db
+if "%DEMO_MODE%"=="true" (
+    echo Database created: community_notes_demo.db
+    echo (Demo database with 1000 records^)
+) else (
+    echo Database created: community_notes.db
+)
 echo.
 echo Next steps:
 echo 1. Configure your MCP client (e.g., Claude Desktop)

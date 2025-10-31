@@ -3,8 +3,17 @@
 
 set -e  # Exit on error
 
+# Parse arguments
+DEMO_MODE=false
+if [ "$1" == "--demo" ]; then
+    DEMO_MODE=true
+fi
+
 echo "======================================"
 echo "Community Notes MCP Server - Setup"
+if [ "$DEMO_MODE" == "true" ]; then
+    echo "(DEMO MODE - 1000 records only)"
+fi
 echo "======================================"
 echo ""
 
@@ -112,12 +121,20 @@ echo ""
 # Run data ingestion
 echo "======================================"
 echo "Starting data ingestion..."
-echo "This may take 15-30 minutes depending on your hardware."
-echo "Processing ~2M records and generating embeddings..."
+if [ "$DEMO_MODE" == "true" ]; then
+    echo "DEMO MODE: Processing only 1000 records (~1-2 minutes)"
+else
+    echo "This may take 15-30 minutes depending on your hardware."
+    echo "Processing ~2M records and generating embeddings..."
+fi
 echo "======================================"
 echo ""
 
-python ingest_data.py
+if [ "$DEMO_MODE" == "true" ]; then
+    python ingest_data.py --demo
+else
+    python ingest_data.py
+fi
 
 if [ $? -eq 0 ]; then
     echo ""
@@ -125,7 +142,12 @@ if [ $? -eq 0 ]; then
     echo "Installation Complete!"
     echo "======================================"
     echo ""
-    echo "Database created: community_notes.db"
+    if [ "$DEMO_MODE" == "true" ]; then
+        echo "Database created: community_notes_demo.db"
+        echo "(Demo database with 1000 records)"
+    else
+        echo "Database created: community_notes.db"
+    fi
     echo ""
     echo "Next steps:"
     echo "1. Configure your MCP client (e.g., Claude Desktop)"
