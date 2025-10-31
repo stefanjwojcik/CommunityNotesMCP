@@ -26,9 +26,29 @@ note_id_mapping: Optional[List[str]] = None
 # Use absolute path to database file (in same directory as this script)
 script_dir = Path(__file__).parent.absolute()
 
-# Default to demo database (can be overridden by environment variable)
-import os
-db_name = os.environ.get("COMMUNITY_NOTES_DB", "community_notes_demo.db")
+# Auto-detect which database to use (can be overridden by environment variable)
+def detect_database():
+    """Detect which database file to use."""
+    # First check environment variable
+    if "COMMUNITY_NOTES_DB" in os.environ:
+        return os.environ["COMMUNITY_NOTES_DB"]
+
+    # Check for full database first (preferred)
+    full_db = script_dir / "community_notes.db"
+    if full_db.exists():
+        print(f"Using full database: {full_db.name}")
+        return "community_notes.db"
+
+    # Fall back to demo database
+    demo_db = script_dir / "community_notes_demo.db"
+    if demo_db.exists():
+        print(f"Using demo database: {demo_db.name}")
+        return "community_notes_demo.db"
+
+    # Default to full database name (will fail later with helpful error)
+    return "community_notes.db"
+
+db_name = detect_database()
 db_path = str(script_dir / db_name)
 
 # Determine index suffix based on database
@@ -197,6 +217,35 @@ async def list_tools() -> List[Tool]:
                 },
                 "required": ["note_id"]
             }
+        ),
+        Tool(
+            name="analyze_status_flips",
+            description=(
+                "Analyze how often community notes change status (flip) over time. "
+                "Shows the count and rate of notes that changed from their initial status to a different status, "
+                "with optional time-based trends to see how flipping behavior has evolved."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "time_period": {
+                        "type": "string",
+                        "description": "Group results by time period for trend analysis",
+                        "enum": ["day", "week", "month", "year"],
+                        "default": "month"
+                    },
+                    "min_age_days": {
+                        "type": "integer",
+                        "description": "Only include notes at least this many days old (default: 7)",
+                        "default": 7
+                    },
+                    "include_details": {
+                        "type": "boolean",
+                        "description": "Include sample notes that flipped for each transition type",
+                        "default": False
+                    }
+                }
+            }
         )
     ]
 
@@ -212,6 +261,8 @@ async def call_tool(name: str, arguments: Any) -> List[TextContent]:
             return await get_note_stats(arguments)
         elif name == "get_note_by_id":
             return await get_note_by_id(arguments)
+        elif name == "analyze_status_flips":
+            return await analyze_status_flips(arguments)
         else:
             return [TextContent(type="text", text=f"Unknown tool: {name}")]
     except Exception as e:
@@ -497,6 +548,172 @@ async def get_note_by_id(args: Dict[str, Any]) -> List[TextContent]:
     return [TextContent(
         type="text",
         text=json.dumps(note, indent=2)
+    )]
+
+async def analyze_status_flips(args: Dict[str, Any]) -> List[TextContent]:
+    """Analyze status flips (notes that changed status over time)."""
+    time_period = args.get("time_period", "month")
+    min_age_days = args.get("min_age_days", 7)
+    include_details = args.get("include_details", False)
+
+    con = get_connection()
+
+    # Calculate cutoff time (min_age_days ago)
+    import time
+    current_time_millis = int(time.time() * 1000)
+    cutoff_time_millis = current_time_millis - (min_age_days * 24 * 60 * 60 * 1000)
+
+    # Time period grouping for SQL
+    time_groupings = {
+        "day": "DATE_TRUNC('day', TO_TIMESTAMP(createdAtMillis / 1000))",
+        "week": "DATE_TRUNC('week', TO_TIMESTAMP(createdAtMillis / 1000))",
+        "month": "DATE_TRUNC('month', TO_TIMESTAMP(createdAtMillis / 1000))",
+        "year": "DATE_TRUNC('year', TO_TIMESTAMP(createdAtMillis / 1000))"
+    }
+    time_group_expr = time_groupings.get(time_period, time_groupings["month"])
+
+    # Overall flip statistics
+    flip_stats_query = """
+        SELECT
+            COUNT(*) as total_notes,
+            SUM(CASE
+                WHEN firstNonNMRStatus IS NOT NULL
+                     AND currentStatus IS NOT NULL
+                     AND firstNonNMRStatus != currentStatus
+                THEN 1 ELSE 0
+            END) as flipped_notes,
+            SUM(CASE
+                WHEN firstNonNMRStatus IS NOT NULL
+                     AND currentStatus IS NOT NULL
+                     AND firstNonNMRStatus != currentStatus
+                THEN 1 ELSE 0
+            END) * 100.0 / COUNT(*) as flip_rate
+        FROM note_status_history
+        WHERE createdAtMillis <= ?
+          AND firstNonNMRStatus IS NOT NULL
+          AND currentStatus IS NOT NULL
+    """
+
+    overall_stats = con.execute(flip_stats_query, [cutoff_time_millis]).fetchone()
+
+    # Flip transitions (what status changed to what)
+    transitions_query = """
+        SELECT
+            firstNonNMRStatus as from_status,
+            currentStatus as to_status,
+            COUNT(*) as count
+        FROM note_status_history
+        WHERE createdAtMillis <= ?
+          AND firstNonNMRStatus IS NOT NULL
+          AND currentStatus IS NOT NULL
+          AND firstNonNMRStatus != currentStatus
+        GROUP BY firstNonNMRStatus, currentStatus
+        ORDER BY count DESC
+    """
+
+    transitions = con.execute(transitions_query, [cutoff_time_millis]).fetchall()
+
+    # Time-based trend analysis
+    trend_query = f"""
+        SELECT
+            {time_group_expr} as time_period,
+            COUNT(*) as total_notes,
+            SUM(CASE
+                WHEN firstNonNMRStatus IS NOT NULL
+                     AND currentStatus IS NOT NULL
+                     AND firstNonNMRStatus != currentStatus
+                THEN 1 ELSE 0
+            END) as flipped_notes,
+            SUM(CASE
+                WHEN firstNonNMRStatus IS NOT NULL
+                     AND currentStatus IS NOT NULL
+                     AND firstNonNMRStatus != currentStatus
+                THEN 1 ELSE 0
+            END) * 100.0 / COUNT(*) as flip_rate
+        FROM note_status_history
+        WHERE createdAtMillis <= ?
+          AND firstNonNMRStatus IS NOT NULL
+          AND currentStatus IS NOT NULL
+        GROUP BY {time_group_expr}
+        ORDER BY time_period DESC
+        LIMIT 24
+    """
+
+    trends = con.execute(trend_query, [cutoff_time_millis]).fetchall()
+
+    # Build result structure
+    result = {
+        "analysis_parameters": {
+            "min_age_days": min_age_days,
+            "time_period": time_period,
+            "cutoff_date": time.strftime('%Y-%m-%d', time.localtime(cutoff_time_millis / 1000))
+        },
+        "overall_statistics": {
+            "total_notes": overall_stats[0],
+            "flipped_notes": overall_stats[1],
+            "flip_rate_percent": round(overall_stats[2], 2)
+        },
+        "status_transitions": [
+            {
+                "from_status": trans[0],
+                "to_status": trans[1],
+                "count": trans[2]
+            }
+            for trans in transitions
+        ],
+        "trends_over_time": [
+            {
+                "period": str(trend[0]),
+                "total_notes": trend[1],
+                "flipped_notes": trend[2],
+                "flip_rate_percent": round(trend[3], 2)
+            }
+            for trend in trends
+        ]
+    }
+
+    # Optionally include sample notes for each transition type
+    if include_details:
+        result["sample_flipped_notes"] = {}
+        for trans in transitions[:5]:  # Top 5 transition types
+            from_status, to_status = trans[0], trans[1]
+            sample_query = """
+                SELECT
+                    s.noteId,
+                    n.summary,
+                    s.firstNonNMRStatus,
+                    s.currentStatus,
+                    s.timestampMillisOfFirstNonNMRStatus,
+                    s.timestampMillisOfCurrentStatus,
+                    n.tweetId
+                FROM note_status_history s
+                JOIN notes n ON s.noteId = n.noteId
+                WHERE s.createdAtMillis <= ?
+                  AND s.firstNonNMRStatus = ?
+                  AND s.currentStatus = ?
+                LIMIT 3
+            """
+            samples = con.execute(sample_query, [cutoff_time_millis, from_status, to_status]).fetchall()
+
+            transition_key = f"{from_status} -> {to_status}"
+            result["sample_flipped_notes"][transition_key] = [
+                {
+                    "noteId": sample[0],
+                    "summary": sample[1][:200] + "..." if sample[1] and len(sample[1]) > 200 else sample[1],
+                    "from_status": sample[2],
+                    "to_status": sample[3],
+                    "first_status_timestamp": sample[4],
+                    "current_status_timestamp": sample[5],
+                    "tweetId": sample[6]
+                }
+                for sample in samples
+            ]
+
+    con.close()
+
+    return [TextContent(
+        type="text",
+        text=json.dumps(result, indent=2)
     )]
 
 async def main():
