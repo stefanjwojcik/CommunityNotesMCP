@@ -50,8 +50,8 @@ echo ""
 echo "Checking for data files..."
 mkdir -p data
 
-NOTES_URL="https://ton.twimg.com/birdwatch-public-data/2025/01/01/notes/notes-00000.tsv"
-STATUS_URL="https://ton.twimg.com/birdwatch-public-data/2025/01/01/noteStatusHistory/noteStatusHistory-00000.tsv"
+NOTES_URL="https://ton.twimg.com/birdwatch-public-data/2025/10/31/notes/notes-00000.tsv"
+STATUS_URL="https://ton.twimg.com/birdwatch-public-data/2025/10/31/noteStatusHistory/noteStatusHistory-00000.tsv"
 
 if [ ! -f "data/notes-00000.tsv" ]; then
     echo "notes-00000.tsv not found. Downloading from Twitter..."
