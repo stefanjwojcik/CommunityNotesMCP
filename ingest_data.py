@@ -10,6 +10,7 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 from pathlib import Path
 import sys
+import subprocess
 from typing import Optional
 
 def create_database(db_path: str = "community_notes.db"):
@@ -172,6 +173,30 @@ def ingest_data(
     print(f"  Status records: {status_count}")
 
     con.close()
+
+    # Rebuild FAISS index
+    print("\n" + "=" * 60)
+    print("REBUILDING FAISS INDEX")
+    print("=" * 60)
+    print()
+
+    script_dir = Path(__file__).parent.absolute()
+    rebuild_script = script_dir / "rebuild_index.py"
+
+    if rebuild_script.exists():
+        result = subprocess.run(
+            [sys.executable, str(rebuild_script)],
+            check=False
+        )
+        if result.returncode == 0:
+            print("\n✓ FAISS index rebuilt successfully")
+        else:
+            print("\n⚠️  FAISS index rebuild failed")
+            print("   Run rebuild_index.py manually if needed")
+            sys.exit(1)
+    else:
+        print("⚠️  rebuild_index.py not found - skipping index rebuild")
+        print(f"   Expected location: {rebuild_script}")
 
 if __name__ == "__main__":
     import argparse

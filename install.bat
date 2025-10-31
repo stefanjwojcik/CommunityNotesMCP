@@ -36,8 +36,14 @@ REM Check if data files exist, download if missing
 echo Checking for data files...
 if not exist "data" mkdir data
 
-set NOTES_URL=https://ton.twimg.com/birdwatch-public-data/2025/10/31/notes/notes-00000.zip
-set STATUS_URL=https://ton.twimg.com/birdwatch-public-data/2025/10/31/noteStatusHistory/noteStatusHistory-00000.zip
+REM Calculate yesterday's date for the data URL
+for /f "tokens=1-3 delims=/ " %%a in ('powershell -Command "(Get-Date).AddDays(-1).ToString('yyyy/MM/dd')"') do (
+    set YESTERDAY=%%a/%%b/%%c
+)
+echo Using data from: %YESTERDAY%
+
+set NOTES_URL=https://ton.twimg.com/birdwatch-public-data/%YESTERDAY%/notes/notes-00000.zip
+set STATUS_URL=https://ton.twimg.com/birdwatch-public-data/%YESTERDAY%/noteStatusHistory/noteStatusHistory-00000.zip
 
 if not exist "data\notes-00000.tsv" (
     echo notes-00000.tsv not found. Downloading from Twitter...

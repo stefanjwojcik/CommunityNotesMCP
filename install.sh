@@ -50,8 +50,19 @@ echo ""
 echo "Checking for data files..."
 mkdir -p data
 
-NOTES_URL="https://ton.twimg.com/birdwatch-public-data/2025/10/30/notes/notes-00000.zip"
-STATUS_URL="https://ton.twimg.com/birdwatch-public-data/2025/10/30/noteStatusHistory/noteStatusHistory-00000.zip"
+# Calculate yesterday's date for the data URL
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    # macOS
+    YESTERDAY=$(date -v-1d +%Y/%m/%d)
+else
+    # Linux
+    YESTERDAY=$(date -d "yesterday" +%Y/%m/%d)
+fi
+
+echo "Using data from: $YESTERDAY"
+
+NOTES_URL="https://ton.twimg.com/birdwatch-public-data/${YESTERDAY}/notes/notes-00000.zip"
+STATUS_URL="https://ton.twimg.com/birdwatch-public-data/${YESTERDAY}/noteStatusHistory/noteStatusHistory-00000.zip"
 
 if [ ! -f "data/notes-00000.tsv" ]; then
     echo "notes-00000.tsv not found. Downloading from Twitter..."
