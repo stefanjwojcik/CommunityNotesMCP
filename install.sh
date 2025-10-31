@@ -50,15 +50,15 @@ echo ""
 echo "Checking for data files..."
 mkdir -p data
 
-NOTES_URL="https://ton.twimg.com/birdwatch-public-data/2025/10/31/notes/notes-00000.tsv"
-STATUS_URL="https://ton.twimg.com/birdwatch-public-data/2025/10/31/noteStatusHistory/noteStatusHistory-00000.tsv"
+NOTES_URL="https://ton.twimg.com/birdwatch-public-data/2025/10/31/notes/notes-00000.zip"
+STATUS_URL="https://ton.twimg.com/birdwatch-public-data/2025/10/31/noteStatusHistory/noteStatusHistory-00000.zip"
 
 if [ ! -f "data/notes-00000.tsv" ]; then
     echo "notes-00000.tsv not found. Downloading from Twitter..."
     if command -v curl &> /dev/null; then
-        curl -L -o "data/notes-00000.tsv" "$NOTES_URL"
+        curl -L -o "data/notes-00000.zip" "$NOTES_URL"
     elif command -v wget &> /dev/null; then
-        wget -O "data/notes-00000.tsv" "$NOTES_URL"
+        wget -O "data/notes-00000.zip" "$NOTES_URL"
     else
         echo "ERROR: Neither curl nor wget found. Cannot download data files."
         echo "Please install curl or wget, or manually download files to data/ directory."
@@ -66,10 +66,19 @@ if [ ! -f "data/notes-00000.tsv" ]; then
     fi
 
     if [ $? -ne 0 ]; then
-        echo "ERROR: Failed to download notes-00000.tsv"
+        echo "ERROR: Failed to download notes-00000.zip"
         exit 1
     fi
-    echo "notes-00000.tsv downloaded successfully!"
+
+    echo "Extracting notes-00000.zip..."
+    unzip -q "data/notes-00000.zip" -d data/
+    if [ $? -ne 0 ]; then
+        echo "ERROR: Failed to extract notes-00000.zip"
+        echo "Please ensure unzip is installed"
+        exit 1
+    fi
+    rm "data/notes-00000.zip"
+    echo "notes-00000.tsv extracted successfully!"
 else
     echo "notes-00000.tsv found!"
 fi
@@ -77,9 +86,9 @@ fi
 if [ ! -f "data/noteStatusHistory-00000.tsv" ]; then
     echo "noteStatusHistory-00000.tsv not found. Downloading from Twitter..."
     if command -v curl &> /dev/null; then
-        curl -L -o "data/noteStatusHistory-00000.tsv" "$STATUS_URL"
+        curl -L -o "data/noteStatusHistory-00000.zip" "$STATUS_URL"
     elif command -v wget &> /dev/null; then
-        wget -O "data/noteStatusHistory-00000.tsv" "$STATUS_URL"
+        wget -O "data/noteStatusHistory-00000.zip" "$STATUS_URL"
     else
         echo "ERROR: Neither curl nor wget found. Cannot download data files."
         echo "Please install curl or wget, or manually download files to data/ directory."
@@ -87,10 +96,19 @@ if [ ! -f "data/noteStatusHistory-00000.tsv" ]; then
     fi
 
     if [ $? -ne 0 ]; then
-        echo "ERROR: Failed to download noteStatusHistory-00000.tsv"
+        echo "ERROR: Failed to download noteStatusHistory-00000.zip"
         exit 1
     fi
-    echo "noteStatusHistory-00000.tsv downloaded successfully!"
+
+    echo "Extracting noteStatusHistory-00000.zip..."
+    unzip -q "data/noteStatusHistory-00000.zip" -d data/
+    if [ $? -ne 0 ]; then
+        echo "ERROR: Failed to extract noteStatusHistory-00000.zip"
+        echo "Please ensure unzip is installed"
+        exit 1
+    fi
+    rm "data/noteStatusHistory-00000.zip"
+    echo "noteStatusHistory-00000.tsv extracted successfully!"
 else
     echo "noteStatusHistory-00000.tsv found!"
 fi

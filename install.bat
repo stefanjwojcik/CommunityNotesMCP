@@ -36,31 +36,47 @@ REM Check if data files exist, download if missing
 echo Checking for data files...
 if not exist "data" mkdir data
 
-set NOTES_URL=https://ton.twimg.com/birdwatch-public-data/2025/01/01/notes/notes-00000.tsv
-set STATUS_URL=https://ton.twimg.com/birdwatch-public-data/2025/01/01/noteStatusHistory/noteStatusHistory-00000.tsv
+set NOTES_URL=https://ton.twimg.com/birdwatch-public-data/2025/10/31/notes/notes-00000.zip
+set STATUS_URL=https://ton.twimg.com/birdwatch-public-data/2025/10/31/noteStatusHistory/noteStatusHistory-00000.zip
 
 if not exist "data\notes-00000.tsv" (
     echo notes-00000.tsv not found. Downloading from Twitter...
-    curl -L -o "data\notes-00000.tsv" "%NOTES_URL%"
+    curl -L -o "data\notes-00000.zip" "%NOTES_URL%"
     if errorlevel 1 (
-        echo ERROR: Failed to download notes-00000.tsv
+        echo ERROR: Failed to download notes-00000.zip
         echo Please ensure curl is installed or manually download the file.
         exit /b 1
     )
-    echo notes-00000.tsv downloaded successfully!
+
+    echo Extracting notes-00000.zip...
+    tar -xf "data\notes-00000.zip" -C data
+    if errorlevel 1 (
+        echo ERROR: Failed to extract notes-00000.zip
+        exit /b 1
+    )
+    del "data\notes-00000.zip"
+    echo notes-00000.tsv extracted successfully!
 ) else (
     echo notes-00000.tsv found!
 )
 
 if not exist "data\noteStatusHistory-00000.tsv" (
     echo noteStatusHistory-00000.tsv not found. Downloading from Twitter...
-    curl -L -o "data\noteStatusHistory-00000.tsv" "%STATUS_URL%"
+    curl -L -o "data\noteStatusHistory-00000.zip" "%STATUS_URL%"
     if errorlevel 1 (
-        echo ERROR: Failed to download noteStatusHistory-00000.tsv
+        echo ERROR: Failed to download noteStatusHistory-00000.zip
         echo Please ensure curl is installed or manually download the file.
         exit /b 1
     )
-    echo noteStatusHistory-00000.tsv downloaded successfully!
+
+    echo Extracting noteStatusHistory-00000.zip...
+    tar -xf "data\noteStatusHistory-00000.zip" -C data
+    if errorlevel 1 (
+        echo ERROR: Failed to extract noteStatusHistory-00000.zip
+        exit /b 1
+    )
+    del "data\noteStatusHistory-00000.zip"
+    echo noteStatusHistory-00000.tsv extracted successfully!
 ) else (
     echo noteStatusHistory-00000.tsv found!
 )
