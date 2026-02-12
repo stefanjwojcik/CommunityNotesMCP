@@ -246,6 +246,52 @@ async def list_tools() -> List[Tool]:
                     }
                 }
             }
+        ),
+        Tool(
+            name="analyze_unique_contributors_over_time",
+            description=(
+                "Analyze the number of unique note contributors (writers) over time. "
+                "Shows how the contributor base has grown or changed across different time periods."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "time_period": {
+                        "type": "string",
+                        "description": "Group results by time period",
+                        "enum": ["day", "week", "month", "year"],
+                        "default": "month"
+                    },
+                    "include_cumulative": {
+                        "type": "boolean",
+                        "description": "Include cumulative unique contributors count",
+                        "default": True
+                    }
+                }
+            }
+        ),
+        Tool(
+            name="analyze_top_contributors_helpful_rate",
+            description=(
+                "Analyze the rate of helpful notes for top contributors from the first year of Community Notes. "
+                "Identifies the top 10% of note writers by volume in the first year and tracks whether their "
+                "notes were marked as helpful over time."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "first_year_cutoff": {
+                        "type": "string",
+                        "description": "End date for first year period (YYYY-MM-DD format). If not provided, calculated as 365 days from earliest note.",
+                    },
+                    "time_period": {
+                        "type": "string",
+                        "description": "Group results by time period for trend analysis",
+                        "enum": ["month", "quarter", "year"],
+                        "default": "month"
+                    }
+                }
+            }
         )
     ]
 
@@ -263,6 +309,10 @@ async def call_tool(name: str, arguments: Any) -> List[TextContent]:
             return await get_note_by_id(arguments)
         elif name == "analyze_status_flips":
             return await analyze_status_flips(arguments)
+        elif name == "analyze_unique_contributors_over_time":
+            return await analyze_unique_contributors_over_time(arguments)
+        elif name == "analyze_top_contributors_helpful_rate":
+            return await analyze_top_contributors_helpful_rate(arguments)
         else:
             return [TextContent(type="text", text=f"Unknown tool: {name}")]
     except Exception as e:
@@ -708,6 +758,248 @@ async def analyze_status_flips(args: Dict[str, Any]) -> List[TextContent]:
                 }
                 for sample in samples
             ]
+
+    con.close()
+
+    return [TextContent(
+        type="text",
+        text=json.dumps(result, indent=2)
+    )]
+
+async def analyze_unique_contributors_over_time(args: Dict[str, Any]) -> List[TextContent]:
+    """Analyze unique contributors (note writers) over time."""
+    time_period = args.get("time_period", "month")
+    include_cumulative = args.get("include_cumulative", True)
+
+    con = get_connection()
+
+    # Time period grouping for SQL
+    time_groupings = {
+        "day": "DATE_TRUNC('day', TO_TIMESTAMP(createdAtMillis / 1000))",
+        "week": "DATE_TRUNC('week', TO_TIMESTAMP(createdAtMillis / 1000))",
+        "month": "DATE_TRUNC('month', TO_TIMESTAMP(createdAtMillis / 1000))",
+        "year": "DATE_TRUNC('year', TO_TIMESTAMP(createdAtMillis / 1000))"
+    }
+    time_group_expr = time_groupings.get(time_period, time_groupings["month"])
+
+    # Get unique contributors per time period
+    contributors_query = f"""
+        SELECT
+            {time_group_expr} as time_period,
+            COUNT(DISTINCT noteAuthorParticipantId) as unique_contributors,
+            COUNT(*) as total_notes,
+            COUNT(*) * 1.0 / COUNT(DISTINCT noteAuthorParticipantId) as notes_per_contributor
+        FROM notes
+        WHERE noteAuthorParticipantId IS NOT NULL
+          AND createdAtMillis IS NOT NULL
+        GROUP BY {time_group_expr}
+        ORDER BY time_period ASC
+    """
+
+    contributors_data = con.execute(contributors_query).fetchall()
+
+    # Overall statistics
+    total_stats = con.execute("""
+        SELECT
+            COUNT(DISTINCT noteAuthorParticipantId) as total_unique_contributors,
+            COUNT(*) as total_notes,
+            MIN(createdAtMillis) as earliest_note,
+            MAX(createdAtMillis) as latest_note
+        FROM notes
+        WHERE noteAuthorParticipantId IS NOT NULL
+    """).fetchone()
+
+    # Build results
+    import time
+    result = {
+        "analysis_parameters": {
+            "time_period": time_period,
+            "include_cumulative": include_cumulative
+        },
+        "overall_statistics": {
+            "total_unique_contributors": total_stats[0],
+            "total_notes": total_stats[1],
+            "average_notes_per_contributor": round(total_stats[1] / total_stats[0], 2) if total_stats[0] > 0 else 0,
+            "earliest_note_date": time.strftime('%Y-%m-%d', time.localtime(total_stats[2] / 1000)) if total_stats[2] else None,
+            "latest_note_date": time.strftime('%Y-%m-%d', time.localtime(total_stats[3] / 1000)) if total_stats[3] else None
+        },
+        "trends_over_time": []
+    }
+
+    # Calculate cumulative if requested
+    cumulative_contributors = set()
+    for row in contributors_data:
+        period_data = {
+            "period": str(row[0]),
+            "unique_contributors": row[1],
+            "total_notes": row[2],
+            "notes_per_contributor": round(row[3], 2)
+        }
+
+        if include_cumulative:
+            # Get all contributors up to this period for cumulative count
+            period_timestamp = row[0]
+            cumulative_query = """
+                SELECT COUNT(DISTINCT noteAuthorParticipantId)
+                FROM notes
+                WHERE noteAuthorParticipantId IS NOT NULL
+                  AND TO_TIMESTAMP(createdAtMillis / 1000) <= ?
+            """
+            cumulative_count = con.execute(cumulative_query, [period_timestamp]).fetchone()[0]
+            period_data["cumulative_contributors"] = cumulative_count
+
+        result["trends_over_time"].append(period_data)
+
+    con.close()
+
+    return [TextContent(
+        type="text",
+        text=json.dumps(result, indent=2)
+    )]
+
+async def analyze_top_contributors_helpful_rate(args: Dict[str, Any]) -> List[TextContent]:
+    """Analyze helpful note rate for top 10% contributors from first year."""
+    first_year_cutoff = args.get("first_year_cutoff")
+    time_period = args.get("time_period", "month")
+
+    con = get_connection()
+
+    # Determine first year cutoff
+    if first_year_cutoff:
+        # Parse user-provided date
+        import datetime
+        cutoff_dt = datetime.datetime.strptime(first_year_cutoff, "%Y-%m-%d")
+        cutoff_millis = int(cutoff_dt.timestamp() * 1000)
+    else:
+        # Calculate as 365 days from earliest note
+        earliest_note = con.execute("""
+            SELECT MIN(createdAtMillis) FROM notes WHERE createdAtMillis IS NOT NULL
+        """).fetchone()[0]
+
+        if not earliest_note:
+            con.close()
+            return [TextContent(
+                type="text",
+                text=json.dumps({"error": "No notes found with timestamps"})
+            )]
+
+        # Add 365 days in milliseconds
+        cutoff_millis = earliest_note + (365 * 24 * 60 * 60 * 1000)
+
+    import time
+    cutoff_date_str = time.strftime('%Y-%m-%d', time.localtime(cutoff_millis / 1000))
+
+    # Find top 10% of contributors by note count in first year
+    top_contributors_query = """
+        WITH first_year_counts AS (
+            SELECT
+                noteAuthorParticipantId,
+                COUNT(*) as note_count
+            FROM notes
+            WHERE createdAtMillis <= ?
+              AND noteAuthorParticipantId IS NOT NULL
+            GROUP BY noteAuthorParticipantId
+        ),
+        ranked_contributors AS (
+            SELECT
+                noteAuthorParticipantId,
+                note_count,
+                PERCENT_RANK() OVER (ORDER BY note_count DESC) as percentile_rank
+            FROM first_year_counts
+        )
+        SELECT noteAuthorParticipantId, note_count
+        FROM ranked_contributors
+        WHERE percentile_rank <= 0.10
+        ORDER BY note_count DESC
+    """
+
+    top_contributors = con.execute(top_contributors_query, [cutoff_millis]).fetchall()
+    top_contributor_ids = [str(c[0]) for c in top_contributors]
+
+    if not top_contributor_ids:
+        con.close()
+        return [TextContent(
+            type="text",
+            text=json.dumps({"error": "No contributors found in first year"})
+        )]
+
+    # Time period grouping
+    time_groupings = {
+        "month": "DATE_TRUNC('month', TO_TIMESTAMP(n.createdAtMillis / 1000))",
+        "quarter": "DATE_TRUNC('quarter', TO_TIMESTAMP(n.createdAtMillis / 1000))",
+        "year": "DATE_TRUNC('year', TO_TIMESTAMP(n.createdAtMillis / 1000))"
+    }
+    time_group_expr = time_groupings.get(time_period, time_groupings["month"])
+
+    # Analyze helpful rate over time for top contributors
+    placeholders = ",".join(["?" for _ in top_contributor_ids])
+    helpful_rate_query = f"""
+        SELECT
+            {time_group_expr} as time_period,
+            COUNT(*) as total_notes,
+            SUM(CASE WHEN s.currentStatus = 'CURRENTLY_RATED_HELPFUL' THEN 1 ELSE 0 END) as helpful_notes,
+            SUM(CASE WHEN s.currentStatus = 'CURRENTLY_RATED_NOT_HELPFUL' THEN 1 ELSE 0 END) as not_helpful_notes,
+            SUM(CASE WHEN s.currentStatus = 'NEEDS_MORE_RATINGS' THEN 1 ELSE 0 END) as needs_more_ratings,
+            SUM(CASE WHEN s.currentStatus = 'CURRENTLY_RATED_HELPFUL' THEN 1 ELSE 0 END) * 100.0 / COUNT(*) as helpful_rate
+        FROM notes n
+        LEFT JOIN note_status_history s ON n.noteId = s.noteId
+        WHERE n.noteAuthorParticipantId IN ({placeholders})
+          AND n.createdAtMillis IS NOT NULL
+        GROUP BY {time_group_expr}
+        ORDER BY time_period ASC
+    """
+
+    helpful_rate_data = con.execute(helpful_rate_query, top_contributor_ids).fetchall()
+
+    # Overall statistics for top contributors
+    overall_query = f"""
+        SELECT
+            COUNT(*) as total_notes,
+            SUM(CASE WHEN s.currentStatus = 'CURRENTLY_RATED_HELPFUL' THEN 1 ELSE 0 END) as helpful_notes,
+            SUM(CASE WHEN s.currentStatus = 'CURRENTLY_RATED_NOT_HELPFUL' THEN 1 ELSE 0 END) as not_helpful_notes,
+            SUM(CASE WHEN s.currentStatus = 'NEEDS_MORE_RATINGS' THEN 1 ELSE 0 END) as needs_more_ratings,
+            SUM(CASE WHEN s.currentStatus = 'CURRENTLY_RATED_HELPFUL' THEN 1 ELSE 0 END) * 100.0 / COUNT(*) as helpful_rate
+        FROM notes n
+        LEFT JOIN note_status_history s ON n.noteId = s.noteId
+        WHERE n.noteAuthorParticipantId IN ({placeholders})
+    """
+
+    overall_stats = con.execute(overall_query, top_contributor_ids).fetchone()
+
+    # Build result
+    result = {
+        "analysis_parameters": {
+            "first_year_cutoff": cutoff_date_str,
+            "time_period": time_period,
+            "top_contributor_count": len(top_contributor_ids),
+            "percentile": "top 10%"
+        },
+        "top_contributors_summary": [
+            {
+                "contributor_id": str(c[0]),
+                "notes_in_first_year": c[1]
+            }
+            for c in top_contributors[:20]  # Show top 20
+        ],
+        "overall_statistics": {
+            "total_notes_from_top_contributors": overall_stats[0],
+            "helpful_notes": overall_stats[1],
+            "not_helpful_notes": overall_stats[2],
+            "needs_more_ratings": overall_stats[3],
+            "helpful_rate_percent": round(overall_stats[4], 2) if overall_stats[4] is not None else 0.0
+        },
+        "trends_over_time": [
+            {
+                "period": str(row[0]),
+                "total_notes": row[1],
+                "helpful_notes": row[2],
+                "not_helpful_notes": row[3],
+                "needs_more_ratings": row[4],
+                "helpful_rate_percent": round(row[5], 2) if row[5] is not None else 0.0
+            }
+            for row in helpful_rate_data
+        ]
+    }
 
     con.close()
 
